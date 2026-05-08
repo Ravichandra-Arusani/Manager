@@ -1,6 +1,6 @@
 // src/components/ImportProjectModal.jsx
 import React, { useState, useRef } from 'react';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { callGemini } from '../utils/gemini';
 
 /* ─── Constants ─── */
 
@@ -137,37 +137,7 @@ NEXT STEP I WANT TO WORK ON: ${firstNext}
 Please start by helping me with the next step above.`;
 }
 
-/* ═══════════════════════════════════════════════
-   Gemini API call
-═══════════════════════════════════════════════ */
-const callGemini = async (prompt) => {
-  const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
-  
-  const attemptCall = async (modelName) => {
-    const model = genAI.getGenerativeModel({
-      model: modelName,
-      generationConfig: {
-        responseMimeType: 'application/json',
-        temperature: 0.1,
-      }
-    });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    console.log(`FULL RESPONSE (${modelName}):`, text);
-    return JSON.parse(text);
-  };
 
-  try {
-    return await attemptCall('gemini-2.5-flash');
-  } catch (err) {
-    console.warn('Primary model failed, attempting fallback to gemini-2.0-flash:', err.message);
-    try {
-      return await attemptCall('gemini-2.0-flash');
-    } catch (fallbackErr) {
-      throw fallbackErr; // If both fail, surface the final error
-    }
-  }
-};
 
 
 /* ═══════════════════════════════════════════════

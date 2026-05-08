@@ -2,29 +2,23 @@
 import React, { useState, useEffect } from 'react';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github-dark.css';
+import { callGeminiText } from '../utils/gemini';
 
 /* ── helpers ── */
-function buildAiSummary(p) {
-  const ms = (p.milestones || []).map(m => `  [${m.done ? 'x' : ' '}] ${m.text}`).join('\n');
-  return `
-## Task / What I need
-[Describe what you need the AI to do here]
-
-## Project Overview
-${p.concept || '(Not specified)'}
-
-## Tech Stack
-${(p.techStack && p.techStack.length > 0) ? p.techStack.join(', ') : '(Not specified)'}
-
-## Current Status & Milestones
-${p.nextSteps ? `Next Steps:\n${p.nextSteps}\n\n` : ''}Milestones:
-${ms || '  (No milestones yet)'}
-
-## Blockers
-${p.blockers || '(None currently)'}
-
-${p.codeSnippet ? `## Code Context\n\`\`\`\n${p.codeSnippet}\n\`\`\`\n\n` : ''}${p.links?.length ? `## Links\n${p.links.join('\n')}\n` : ''}`.trim();
+// Rough token estimator (1 token ≈ 4 chars)
+function estimateTokens(p) {
+  const text = [p.concept, p.blockers, p.nextSteps, p.codeSnippet,
+    (p.milestones || []).map(m => m.text).join(' '),
+    (p.techStack || []).join(' '),
+  ].join(' ');
+  return Math.round(text.length / 4);
 }
+
+const MODEL_SYSTEM_PROMPTS = {
+  claude:  'Structure for long-context reasoning. Use clear markdown headers (##). Be thorough but concise.',
+  gpt:     'Use numbered instructions. Be explicit, direct, and structured.',
+  gemini:  'Keep it concise. Use short bullet points. Prefer brevity over depth.',
+};
 
 function parseTagInput(raw) {
   return raw.split(/[,\n]+/).map(t => t.trim()).filter(Boolean);
@@ -129,6 +123,8 @@ export default function ProjectModal({ project, onSave, onDelete, onClose }) {
   const [linksInput, setLinksInput] = useState((project?.links      || []).join('\n'));
   const [toast,      setToast]      = useState('');
   const [saving,     setSaving]     = useState(false);
+  const [aiLoading,  setAiLoading]  = useState(false);
+  const [targetModel, setTargetModel] = useState('claude');
 
   /* Sync code highlight */
   useEffect(() => {
@@ -142,8 +138,41 @@ export default function ProjectModal({ project, onSave, onDelete, onClose }) {
     setTimeout(() => setToast(''), 2500);
   };
 
-  const copyForAI = () => {
-    navigator.clipboard.writeText(buildAiSummary(form)).then(() => showToast('📋 Copied for AI!'));
+  const copyForAI = async () => {
+    setAiLoading(true);
+    try {
+      const rawContext = `
+Project: ${form.name}
+Goal: ${form.concept || '(not set)'}
+Tech Stack: ${(form.techStack || []).join(', ') || '(not set)'}
+Milestones: ${(form.milestones || []).map(m => `[${m.done ? 'x' : ' '}] ${m.text}`).join(' | ') || '(none)'}
+Blockers: ${form.blockers || '(none)'}
+Next Steps: ${form.nextSteps || '(not set)'}
+${form.codeSnippet ? `Code Snippet:\n${form.codeSnippet}` : ''}
+${form.links?.length ? `Links: ${form.links.join(', ')}` : ''}
+      `.trim();
+
+      const styleNote = MODEL_SYSTEM_PROMPTS[targetModel];
+
+      const prompt = `You are an AI context compressor for developer projects.
+${styleNote}
+Compress the following raw project notes into a clean, structured context block under 500 tokens.
+Another AI will read this to immediately understand the project and help. No fluff, no preamble.
+
+RAW NOTES:
+${rawContext}`;
+
+      const summary = await callGeminiText(prompt);
+      await navigator.clipboard.writeText(summary);
+      showToast(`📋 Copied for ${targetModel.charAt(0).toUpperCase() + targetModel.slice(1)}!`);
+    } catch (e) {
+      // Graceful fallback — use static summary if Gemini fails
+      const fallback = `## ${form.name}\n**Goal:** ${form.concept || '(not set)'}\n**Stack:** ${(form.techStack || []).join(', ') || '(not set)'}\n**Next:** ${form.nextSteps || '(not set)'}\n**Blockers:** ${form.blockers || '(none)'}\n**Milestones:** ${(form.milestones || []).map(m => `[${m.done ? 'x' : ' '}] ${m.text}`).join(', ') || '(none)'}`;
+      await navigator.clipboard.writeText(fallback);
+      showToast('📋 Copied (static fallback)');
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const copyShareLink = () => {
@@ -338,6 +367,11 @@ export default function ProjectModal({ project, onSave, onDelete, onClose }) {
             </div>
           </Section>
 
+          {/* Token counter */}
+          <div style={{ textAlign: 'right', fontSize: '0.72rem', color: 'var(--text-3)', padding: '0 1rem 0.25rem' }}>
+            ~{estimateTokens(form).toLocaleString()} tokens raw · AI will compress to &lt;500
+          </div>
+
           {/* Action bar */}
           <div
             className="fixed bottom-0 flex gap-2 p-4"
@@ -350,7 +384,37 @@ export default function ProjectModal({ project, onSave, onDelete, onClose }) {
             <button id="save-project-btn" className="btn-primary flex-1" onClick={handleSave} disabled={saving}>
               {saving ? '…' : '💾 Save'}
             </button>
-            <button className="btn-ghost" onClick={copyForAI} title="Copy AI summary">📋</button>
+
+            {/* Model selector + copy button */}
+            <div className="flex items-center" style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+              <select
+                value={targetModel}
+                onChange={e => setTargetModel(e.target.value)}
+                style={{
+                  background: 'rgba(255,255,255,0.07)',
+                  border: 'none',
+                  color: 'var(--text-1)',
+                  fontSize: '0.75rem',
+                  padding: '0 0.4rem',
+                  height: '100%',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value="claude">Claude</option>
+                <option value="gpt">GPT</option>
+                <option value="gemini">Gemini</option>
+              </select>
+              <button
+                className="btn-ghost"
+                onClick={copyForAI}
+                disabled={aiLoading}
+                title="Copy AI-compressed summary"
+                style={{ borderLeft: '1px solid var(--border)', borderRadius: 0 }}
+              >
+                {aiLoading ? '⏳' : '📋'}
+              </button>
+            </div>
+
             {form.isPublic && (
               <button className="btn-ghost" onClick={copyShareLink} title="Copy share link">🔗</button>
             )}
