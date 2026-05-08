@@ -7,27 +7,23 @@ import 'highlight.js/styles/github-dark.css';
 function buildAiSummary(p) {
   const ms = (p.milestones || []).map(m => `  [${m.done ? 'x' : ' '}] ${m.text}`).join('\n');
   return `
-# 🧠 Project Context — ${p.name}
+## Task / What I need
+[Describe what you need the AI to do here]
 
-## Concept
-${p.concept || '—'}
+## Project Overview
+${p.concept || '(Not specified)'}
 
 ## Tech Stack
-${(p.techStack || []).join(', ') || '—'}
+${(p.techStack && p.techStack.length > 0) ? p.techStack.join(', ') : '(Not specified)'}
 
-## Milestones
-${ms || '  (none)'}
+## Current Status & Milestones
+${p.nextSteps ? `Next Steps:\n${p.nextSteps}\n\n` : ''}Milestones:
+${ms || '  (No milestones yet)'}
 
 ## Blockers
-${p.blockers || '—'}
+${p.blockers || '(None currently)'}
 
-## Next Steps
-${p.nextSteps || '—'}
-
-${p.codeSnippet ? `## Code Snippet\n\`\`\`\n${p.codeSnippet}\n\`\`\`` : ''}
-
-${p.links?.length ? `## Links\n${p.links.join('\n')}` : ''}
-`.trim();
+${p.codeSnippet ? `## Code Context\n\`\`\`\n${p.codeSnippet}\n\`\`\`\n\n` : ''}${p.links?.length ? `## Links\n${p.links.join('\n')}\n` : ''}`.trim();
 }
 
 function parseTagInput(raw) {

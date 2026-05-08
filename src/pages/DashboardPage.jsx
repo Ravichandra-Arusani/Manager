@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useAuth }            from '../hooks/useAuth';
 import { useProjects }        from '../hooks/useProjects';
-import MindMapDashboard       from '../components/MindMapDashboard';
+import ProjectGrid            from '../components/ProjectGrid';
 import ProjectModal           from '../components/ProjectModal';
 import ImportProjectModal     from '../components/ImportProjectModal';
 
@@ -127,14 +127,12 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* ── Mind-map area ── */}
-      <main className="flex-1 flex flex-col" style={{ position: 'relative' }}>
+      {/* ── Main area ── */}
+      <main className="flex-1 flex flex-col items-center justify-center" style={{ position: 'relative' }}>
         {loading ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="spinner" />
-          </div>
+          <div className="spinner" />
         ) : (
-          <MindMapDashboard
+          <ProjectGrid
             projects={projects}
             onSelect={setSelected}
             onAdd={handleAdd}

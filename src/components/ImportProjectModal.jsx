@@ -142,19 +142,31 @@ Please start by helping me with the next step above.`;
 ═══════════════════════════════════════════════ */
 const callGemini = async (prompt) => {
   const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
-    generationConfig: {
-      responseMimeType: 'application/json',
-      temperature: 0.1,
-    }
-  });
+  
+  const attemptCall = async (modelName) => {
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      generationConfig: {
+        responseMimeType: 'application/json',
+        temperature: 0.1,
+      }
+    });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    console.log(`FULL RESPONSE (${modelName}):`, text);
+    return JSON.parse(text);
+  };
 
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
-  console.log('FULL RESPONSE:', text);
-  const parsed = JSON.parse(text); // SDK with responseMimeType guarantees valid JSON
-  return parsed;
+  try {
+    return await attemptCall('gemini-2.5-flash');
+  } catch (err) {
+    console.warn('Primary model failed, attempting fallback to gemini-2.0-flash:', err.message);
+    try {
+      return await attemptCall('gemini-2.0-flash');
+    } catch (fallbackErr) {
+      throw fallbackErr; // If both fail, surface the final error
+    }
+  }
 };
 
 
